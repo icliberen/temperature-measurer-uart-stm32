@@ -1,4 +1,4 @@
-# 🌡️ TemperatureMeasurer — UART STM32
+# 🌡️ Temperature Measurer — UART STM32
 
 Real-time internal temperature measurement on the **STM32F407VGT6** (Discovery board) with UART data logging. The MCU's built-in temperature sensor is sampled via ADC + DMA, and calibrated readings are streamed over UART at 115200 baud.
 
