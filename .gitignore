@@ -1,0 +1,27 @@
+# Build outputs
+Debug/
+Release/
+*.o
+*.d
+*.elf
+*.bin
+*.hex
+*.list
+*.map
+*.size
+*.su
+
+# IDE metadata (optional — keep .cproject/.project for STM32CubeIDE import)
+# .settings/
+# .cproject
+# .project
+# .mxproject
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.bak
+*.tmp
+*~
