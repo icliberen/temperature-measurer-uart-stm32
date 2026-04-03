@@ -1,4 +1,4 @@
-# 🌡️ HeatMeasurer — UART STM32
+# 🌡️ TemperatureMeasurer — UART STM32
 
 Real-time internal temperature measurement on the **STM32F407VGT6** (Discovery board) with UART data logging. The MCU's built-in temperature sensor is sampled via ADC + DMA, and calibrated readings are streamed over UART at 115200 baud.
 
@@ -66,7 +66,7 @@ Real-time internal temperature measurement on the **STM32F407VGT6** (Discovery b
 
 1. **Clone** the repository:
    ```bash
-   git clone https://github.com/icliberen/heatmeasurer-uart-stm32.git
+   git clone https://github.com/icliberen/temperature-measurer-uart-stm32.git
    ```
 2. **Open** STM32CubeIDE → *File → Import → Existing Projects into Workspace* → select the cloned folder.
 3. **Build** the project (`Ctrl+B` or *Project → Build All*).
