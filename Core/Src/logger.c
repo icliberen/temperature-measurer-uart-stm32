@@ -1,5 +1,9 @@
 #include "logger.h"
+#include "ds18b20.h"
+#include "sd_logger.h"
 #include <stdio.h>
+
+extern volatile uint8_t logging_enabled;
 
 #ifndef VREFINT_CAL_ADDR
 #define VREFINT_CAL_ADDR ((uint16_t*)0x1FFF7A2A)
@@ -31,6 +35,7 @@ float LOGGER_ConvertTemp_Cal(uint16_t raw_temp, uint16_t raw_vref)
 
 void LOGGER_SendBlock(UART_HandleTypeDef *huart, uint16_t *buf, uint16_t len)
 {
+    if (!logging_enabled) return;
     if (len < 2) return;
 
     // Expect interleaved data: TEMP, VREF, TEMP, VREF...
@@ -48,10 +53,22 @@ void LOGGER_SendBlock(UART_HandleTypeDef *huart, uint16_t *buf, uint16_t len)
 
     float t = LOGGER_ConvertTemp_Cal(raw_temp, raw_vref);
 
-    char msg[96];
-    int n = snprintf(msg, sizeof(msg),
-                     "TEMP_RAW=%u VREF_RAW=%u  T=%.2f C\r\n",
-                     raw_temp, raw_vref, t);
+    float t_ext = 0.0f;
+    HAL_StatusTypeDef ext_st = DS18B20_ReadTemperature(&t_ext);
+
+    char msg[128];
+    int n;
+    if (ext_st == HAL_OK) {
+        n = snprintf(msg, sizeof(msg),
+                     "TEMP_RAW=%u VREF_RAW=%u  T_INT=%.2f C T=%.2f C T_EXT=%.2f C\r\n",
+                     raw_temp, raw_vref, t, t, t_ext);
+    } else {
+        n = snprintf(msg, sizeof(msg),
+                     "TEMP_RAW=%u VREF_RAW=%u  T_INT=%.2f C T=%.2f C T_EXT=NA\r\n",
+                     raw_temp, raw_vref, t, t);
+    }
 
     HAL_UART_Transmit(huart, (uint8_t*)msg, (uint16_t)n, 100);
+
+    SD_Logger_Append(HAL_GetTick(), t, (ext_st == HAL_OK) ? t_ext : -999.0f);
 }

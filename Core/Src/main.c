@@ -13,6 +13,9 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include "logger.h"
+#include "ds18b20.h"
+#include "sd_logger.h"
+#include "cmd.h"
 #include <string.h>
 
 /* USER CODE END Includes */
@@ -58,8 +61,8 @@ uint16_t adc_buffer[ADC_BUF_SIZE];
 volatile uint8_t adc_half_ready = 0;
 volatile uint8_t adc_full_ready = 0;
 
-// Logging state (toggled via EXTI button)
-volatile uint8_t logging_enabled = 0;
+// Logging state (toggled via EXTI button, UART `start`/`stop` commands)
+volatile uint8_t logging_enabled = 1;
 volatile uint32_t tim2_ticks = 0;
 
 /* USER CODE END PV */
@@ -89,6 +92,15 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM2)
   {
 	  tim2_ticks++;
+  }
+}
+
+extern uint8_t cmd_rx_byte;
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART2)
+  {
+    Cmd_OnRxByte(cmd_rx_byte);
   }
 }
 
@@ -198,6 +210,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  DS18B20_Init();
   MX_DMA_Init();
   MX_I2C1_Init();
   MX_I2S3_Init();
@@ -217,11 +230,12 @@ int main(void)
   const char *hello = "DATALOGGER BOOT\r\n";
   HAL_UART_Transmit(&huart2, (uint8_t*)hello, strlen(hello), HAL_MAX_DELAY);
 
-  // Start with logging disabled.
-  // User button (blue) on PA0 will toggle logging.
-  logging_enabled = 0;
-  // Do NOT call Start_Logging() here
-  // Do NOT start ADC or TIM2 here; Start_Logging() will do that
+  SD_Logger_Init();
+  Cmd_Init(&huart2);
+
+  // Logging on by default; can be toggled by PA0 button or UART `stop`/`start`.
+  logging_enabled = 1;
+  Start_Logging();
 
 
   /* USER CODE END 2 */
@@ -253,7 +267,9 @@ int main(void)
       LOGGER_SendBlock(&huart2, &adc_buffer[ADC_BUF_SIZE / 2], ADC_BUF_SIZE / 2);
     }
 
-    // 🔋 LOW POWER: sleep until next interrupt (DMA, EXTI button, etc.)
+    Cmd_Process();
+
+    // LOW POWER: sleep until next interrupt (DMA, EXTI button, UART RX, etc.)
     HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);   // Wait For Interrupt
 
     /* USER CODE BEGIN 3 */

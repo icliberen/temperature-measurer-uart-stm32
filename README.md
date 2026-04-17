@@ -138,6 +138,105 @@ logger.c → average + calibrate → UART TX
 
 The project includes `datalogger.ioc`. You can open it in STM32CubeMX or CubeIDE's IOC editor to modify pin/peripheral settings. User code is preserved inside `/* USER CODE BEGIN */` / `/* USER CODE END */` blocks.
 
+## Enhancements
+
+The firmware ships with four optional add-ons that can be enabled
+independently. All hooks live in `main.c` / `logger.c` and the existing
+`TEMP_RAW=... T=xx.xx C` field is preserved for backwards compatibility.
+
+### DS18B20 External Sensor
+
+A 1-Wire bit-bang driver on **PC1** (override via `DS18B20_GPIO_PORT` /
+`DS18B20_GPIO_PIN` in `ds18b20.h`). Requires a 4.7 k pull-up between the
+data line and 3.3 V. DWT cycles are used for microsecond timing, so the
+sensor does not consume an extra TIM.
+
+Source: `Core/Inc/ds18b20.h`, `Core/Src/ds18b20.c`.
+
+API:
+
+```c
+void              DS18B20_Init(void);
+HAL_StatusTypeDef DS18B20_ReadTemperature(float *out_c);
+```
+
+Enable by calling `DS18B20_Init()` after `MX_GPIO_Init()` (already wired
+in `main.c`). Disable by commenting out the call — the logger then emits
+`T_EXT=NA`. Example line with the sensor attached:
+
+```
+TEMP_RAW=942 VREF_RAW=1526  T_INT=27.34 C T=27.34 C T_EXT=24.18 C
+```
+
+### SD Card Logging
+
+CSV logger on **SPI2** with FatFS.
+
+| Signal | Pin  |
+|--------|------|
+| SCK    | PB13 |
+| MISO   | PB14 |
+| MOSI   | PB15 |
+| CS     | PB12 (GPIO output) |
+
+Required CubeMX steps:
+
+1. **Middleware -> FATFS** -> Mode: **User-defined**.
+2. **Connectivity -> SPI2** -> Full-Duplex Master, map pins as above.
+3. Add CS as a regular GPIO output on **PB12** (initial level HIGH).
+4. In `user_diskio.c`, implement the `disk_read` / `disk_write` / `disk_status`
+   stubs using `HAL_SPI_TransmitReceive` and toggle PB12 for chip select.
+5. Regenerate code (this makes `ff.h` available on the include path).
+
+CSV format (header written once):
+
+```
+timestamp_ms,t_internal_c,t_external_c
+12043,27.34,24.18
+12543,27.35,24.19
+```
+
+If FatFS is not yet enabled, `SD_Logger_Init()` returns non-zero and the
+`SD_Logger_Append` / `SD_Logger_Sync` calls are no-ops.
+
+Source: `Core/Inc/sd_logger.h`, `Core/Src/sd_logger.c`.
+
+### Command Interface
+
+Interactive control over the same USART2 link (115200 8N1), newline- or
+CR-terminated. Implemented via `HAL_UART_Receive_IT` with 1-byte rearm.
+
+| Command       | Example   | Response              |
+|---------------|-----------|-----------------------|
+| `start`       | `start`   | `OK LOGGING=ON`       |
+| `stop`        | `stop`    | `OK LOGGING=OFF`      |
+| `rate <hz>`   | `rate 25` | `OK RATE=25`          |
+| `dump`        | `dump`    | `CFG RATE=10 LOGGING=on SD=ready` |
+| `help`        | `help`    | list of commands      |
+| (unknown)     | `foo`     | `ERR unknown`         |
+
+`rate` accepts an integer **1..50 Hz** and reconfigures TIM2's prescaler
+and auto-reload from the APB1 timer clock.
+
+Source: `Core/Inc/cmd.h`, `Core/Src/cmd.c`.
+
+### Host Script
+
+`tools/live_plot.py` parses the stream and shows a rolling matplotlib
+plot of `T_INT` and (if present) `T_EXT`. Install & run:
+
+```
+cd tools
+pip install -r requirements.txt
+python live_plot.py --port COM5
+```
+
+Arguments: `--port`, `--baud` (default 115200), `--window` (default 200).
+On Ctrl+C the script writes `capture.csv` with columns
+`t_s,t_internal_c,t_external_c`.
+
+See `tools/README.md` for details.
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
